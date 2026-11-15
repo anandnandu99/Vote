@@ -1,3 +1,1 @@
-Put contestant photos here. File names must match contestants.js:
-prajakta.jpg, tanvi.jpg, sanket.jpg, deepali.jpg, anushri.jpg, reva.jpg
-(Keep each photo under about 300 KB so the page loads fast.)
+https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSn6UfckWd76J7GR90CpkQB1INex02bZn4GQdA3SNaOrQ&s=10
