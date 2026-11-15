@@ -14,8 +14,12 @@ create table if not exists options (
   name text not null,
   photo_url text,
   total int not null default 0,
+  pos int not null default 1000,
   created_at timestamptz default now()
 );
+
+-- for databases created before hardcoded contestants were added
+alter table options add column if not exists pos int not null default 1000;
 
 alter table folders enable row level security;
 alter table options enable row level security;

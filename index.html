@@ -45,6 +45,7 @@ label.file{display:flex;align-items:center;gap:12px;margin:10px 0;color:var(--mu
 <nav><button data-t="vote">Vote</button><button data-t="board">Leaderboard</button><button data-t="manage">Manage</button></nav>
 <div class="toast" id="toast"></div>
 <script src="config.js" onerror="void 0"></script>
+<script src="contestants.js" onerror="void 0"></script>
 <script>
 const KEY='vote-app-v1';
 const COLORS=['#7c5cff','#e5484d','#0ea5a4','#d97706','#2563eb','#c026d3','#16a34a','#db2777'];
@@ -53,7 +54,15 @@ const mkid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const mkp=n=>({id:mkid('p'),name:n,photo:'',total:0});
 let S={cur:'',folders:[]},mine={},tab='vote',draft=null,STAT=REMOTE?'● Connecting':'○ Local only';
 try{const r=JSON.parse(localStorage.getItem(KEY)||'null');if(r&&r.folders)S=r}catch(e){}
-if(!REMOTE&&!S.folders.length)S={cur:'f0',folders:[{id:'f0',name:'Bigg Boss',limit:100,round:0,people:['Prajakta','Tanvi','Sanket','Deepali','Anushri','Reva'].map(mkp)}]};
+const C=window.CONTESTANTS;
+function seedLocal(){
+ let f=S.folders.find(x=>x.id===C.id);
+ if(!f){f={id:C.id,name:C.folder,limit:C.votes||100,round:0,people:[]};S.folders.unshift(f)}
+ C.people.forEach(c=>{let p=f.people.find(x=>x.id===c.id);if(!p){p={id:c.id,total:0};f.people.push(p)}p.name=c.name;p.photo=c.photo||''});
+ const ix=p=>{const i=C.people.findIndex(c=>c.id===p.id);return i<0?999:i};
+ f.people.sort((a,b)=>ix(a)-ix(b));
+ if(!S.cur)S.cur=C.id}
+if(!REMOTE){if(C)seedLocal();else if(!S.folders.length)S={cur:'f0',folders:[{id:'f0',name:'Bigg Boss',limit:100,round:0,people:['Prajakta','Tanvi','Sanket','Deepali','Anushri','Reva'].map(mkp)}]}}
 const F=()=>S.folders.find(f=>f.id===S.cur)||(S.folders[0]&&(S.cur=S.folders[0].id,S.folders[0]));
 const cache=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){if(!REMOTE)toast('Could not save (storage full?)')}};
 const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
@@ -82,9 +91,13 @@ async function upload(id,blob){
  catch(e){toast('Photo upload: '+e.message);return null}}
 function dropPhoto(url){if(!REMOTE||!url||!url.includes('/object/public/photos/'))return;
  fetch(CFG.url+'/storage/v1/object/photos/'+url.split('/object/public/photos/')[1],{method:'DELETE',headers:H({})}).catch(()=>{})}
+async function seedRemote(){
+ if(!C||!REMOTE)return;
+ await R('POST','/rest/v1/folders?on_conflict=id',[{id:C.id,name:C.folder,vote_limit:C.votes||100,round:0}],{Prefer:'resolution=ignore-duplicates,return=minimal'});
+ await R('POST','/rest/v1/options?on_conflict=id',C.people.map((c,i)=>({id:c.id,folder_id:C.id,name:c.name,photo_url:c.photo||null,pos:i})),{Prefer:'resolution=merge-duplicates,return=minimal'})}
 async function pull(){
  if(!REMOTE)return;
- const a=await R('GET','/rest/v1/folders?select=*&order=created_at'),b=await R('GET','/rest/v1/options?select=*&order=created_at');
+ const a=await R('GET','/rest/v1/folders?select=*&order=created_at'),b=await R('GET','/rest/v1/options?select=*&order=pos,created_at');
  if(!a||!b)return;
  const fs=await a.json(),os=await b.json();
  S.folders=fs.map(f=>({id:f.id,name:f.name,limit:f.vote_limit,round:f.round,people:os.filter(o=>o.folder_id===f.id).map(o=>({id:o.id,name:o.name,photo:o.photo_url||'',total:o.total}))}));
@@ -122,7 +135,8 @@ async function opVote(f,v){
  const g=S.folders.find(x=>x.id===fid)||f;addUsed(g,n);return true}
 function toPhoto(file,cb){const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=240;const s=Math.min(im.width,im.height);c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,240,240);const d=c.toDataURL('image/jpeg',.82);c.toBlob(b=>cb({dataUrl:d,blob:b}),'image/jpeg',.82)};im.src=rd.result};rd.readAsDataURL(file)}
 /* ---------- UI ---------- */
-function avatar(p,i,cls='img'){return p.photo?`<img class="${cls}" src="${esc(p.photo)}" alt="">`:`<div class="${cls}" style="background:${COLORS[i%COLORS.length]}">${esc(p.name[0]||'?').toUpperCase()}</div>`}
+const fb=el=>{const d=document.createElement('div');d.className=el.className;d.style.background=el.dataset.c;d.textContent=el.dataset.i;el.replaceWith(d)};
+function avatar(p,i,cls='img'){return p.photo?`<img class="${cls}" src="${esc(p.photo)}" alt="" data-i="${esc((p.name[0]||'?').toUpperCase())}" data-c="${COLORS[i%COLORS.length]}" onerror="fb(this)">`:`<div class="${cls}" style="background:${COLORS[i%COLORS.length]}">${esc(p.name[0]||'?').toUpperCase()}</div>`}
 const chips=()=>`<div class="chips">${S.folders.map(f=>`<button class="chip ${f.id===S.cur?'act':''}" data-f="${f.id}">📁 ${esc(f.name)}</button>`).join('')}<span class="stat" id="stat">${STAT}</span></div>`;
 function render(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===tab));
@@ -187,5 +201,5 @@ function render(){
 }
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();refresh()});
 render();
-if(REMOTE){pull().then(render);setInterval(()=>{if(tab==='board')refresh()},8000)}
+if(REMOTE){seedRemote().then(pull).then(render);setInterval(()=>{if(tab==='board')refresh()},8000)}
 </script></body></html>
